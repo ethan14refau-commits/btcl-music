@@ -29,7 +29,7 @@ const client = new Client({
 // ─── Discord Player setup ─────────────────────────────────────────────────────
 const player = new Player(client);
 
-player.extractors.loadMulti(DefaultExtractors).then(() => {
+player.extractors.register(DefaultExtractors, {}).then(() => {
   console.log('✅ Extractors chargés');
 }).catch(console.error);
 
