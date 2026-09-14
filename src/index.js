@@ -6,6 +6,7 @@ const {
   EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
 } = require('discord.js');
 const { Player } = require('discord-player');
+const { YoutubeiExtractor } = require('discord-player-youtubei');
 
 const TOKEN = process.env.DISCORD_TOKEN;
 const PREFIX = process.env.PREFIX || '+';
@@ -29,8 +30,8 @@ const client = new Client({
 const player = new Player(client);
 
 (async () => {
-  await player.extractors.loadDefault();
-  console.log('✅ Extractors chargés');
+  await player.extractors.register(YoutubeiExtractor, {});
+  console.log('✅ YoutubeiExtractor chargé');
 })().catch(console.error);
 
 const COLOR = 0x0d0d0d;

@@ -11,8 +11,8 @@
   },
   "dependencies": {
     "discord.js": "^14.14.1",
-    "discord-player": "^6.7.1",
-    "@discord-player/extractor": "^4.5.0",
+    "discord-player": "^7.1.0",
+    "discord-player-youtubei": "^1.2.9",
     "dotenv": "^16.4.5"
   }
 }
