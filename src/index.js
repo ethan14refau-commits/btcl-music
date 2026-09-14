@@ -5,8 +5,8 @@ const {
   Client, GatewayIntentBits, Partials,
   EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
 } = require('discord.js');
-const { Player } = require('discord-player');
-const { YoutubeExtractor } = require('discord-player-youtubei');
+const { Player, QueryType } = require('discord-player');
+const { DefaultExtractors } = require('@discord-player/extractor');
 
 const TOKEN = process.env.DISCORD_TOKEN;
 const PREFIX = process.env.PREFIX || '+';
@@ -26,13 +26,16 @@ const client = new Client({
   partials: [Partials.Channel],
 });
 
-// ─── Discord Player setup ─────────────────────────────────────────────────────
-const player = new Player(client);
+const player = new Player(client, {
+  ytdlOptions: {
+    quality: 'highestaudio',
+    highWaterMark: 1 << 25,
+  },
+});
 
-(async () => {
-  await player.extractors.register(YoutubeExtractor, {});
-  console.log('✅ YoutubeExtractor chargé');
-})().catch(console.error);
+player.extractors.loadMulti(DefaultExtractors).then(() => {
+  console.log('✅ Extractors chargés');
+}).catch(console.error);
 
 const COLOR = 0x0d0d0d;
 const COLOR_ERR = 0x2b0000;
@@ -52,9 +55,8 @@ function buildButtons(loop = false) {
   );
 }
 
-// ─── Player events ────────────────────────────────────────────────────────────
 player.events.on('playerStart', (queue, track) => {
-  queue.metadata.channel?.send({
+  queue.metadata?.send({
     embeds: [
       new EmbedBuilder()
         .setColor(COLOR)
@@ -75,54 +77,52 @@ player.events.on('playerStart', (queue, track) => {
 });
 
 player.events.on('audioTrackAdd', (queue, track) => {
-  queue.metadata.channel?.send({
-    embeds: [
-      new EmbedBuilder()
-        .setColor(COLOR)
-        .setTitle('🖤 Ajouté à la file')
-        .setThumbnail(track.thumbnail)
-        .addFields(
-          { name: '🎵 Titre', value: track.title, inline: false },
-          { name: '⏱️ Durée', value: track.duration, inline: true },
-          { name: '📋 Position', value: `#${queue.tracks.size}`, inline: true },
-        )
-        .setFooter({ text: '🖤 BTCL Music' }),
-    ],
-  }).catch(() => {});
+  if (queue.isPlaying()) {
+    queue.metadata?.send({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(COLOR)
+          .setTitle('🖤 Ajouté à la file')
+          .setThumbnail(track.thumbnail)
+          .addFields(
+            { name: '🎵 Titre', value: track.title, inline: false },
+            { name: '⏱️ Durée', value: track.duration, inline: true },
+            { name: '📋 Position', value: `#${queue.tracks.size}`, inline: true },
+          )
+          .setFooter({ text: '🖤 BTCL Music' }),
+      ],
+    }).catch(() => {});
+  }
 });
 
 player.events.on('emptyQueue', (queue) => {
-  queue.metadata.channel?.send({ embeds: [embed('👋 File terminée — déconnexion.')] }).catch(() => {});
+  queue.metadata?.send({ embeds: [embed('👋 File terminée.')] }).catch(() => {});
 });
 
 player.events.on('error', (queue, error) => {
-  console.error('[Player Error]', error);
-  queue.metadata.channel?.send({ embeds: [embed(`❌ Erreur : ${error.message}`, COLOR_ERR)] }).catch(() => {});
+  console.error('[Player Error]', error.message);
+  queue.metadata?.send({ embeds: [embed(`❌ Erreur : ${error.message}`, COLOR_ERR)] }).catch(() => {});
 });
 
 player.events.on('playerError', (queue, error) => {
-  console.error('[Player Error]', error);
-  queue.metadata.channel?.send({ embeds: [embed(`❌ Erreur de lecture : ${error.message}`, COLOR_ERR)] }).catch(() => {});
+  console.error('[Player Error]', error.message);
+  queue.metadata?.send({ embeds: [embed(`❌ Erreur de lecture : ${error.message}`, COLOR_ERR)] }).catch(() => {});
 });
 
-// ─── Ready ────────────────────────────────────────────────────────────────────
 client.once('clientReady', () => {
   console.log(`✅ ${client.user.tag} est en ligne !`);
   client.user.setActivity('.gg/btcl', { type: 1, url: 'https://www.twitch.tv/btcl' });
 });
 
-// ─── Commands ─────────────────────────────────────────────────────────────────
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild) return;
   if (!message.content.startsWith(PREFIX)) return;
 
   const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
   const cmd = args.shift().toLowerCase();
-
   const voiceChannel = message.member?.voice?.channel;
 
   try {
-    // ── PLAY ──
     if (cmd === 'play' || cmd === 'p') {
       if (!args.length) return message.reply({ embeds: [embed('❌ Usage : `+play <titre ou URL>`', COLOR_ERR)] });
       if (!voiceChannel) return message.reply({ embeds: [embed('❌ Tu dois être dans un salon vocal.', COLOR_ERR)] });
@@ -132,7 +132,7 @@ client.on('messageCreate', async (message) => {
 
       const { track } = await player.play(voiceChannel, query, {
         nodeOptions: {
-          metadata: { channel: message.channel },
+          metadata: message.channel,
           selfDeaf: true,
           volume: 80,
           leaveOnEmpty: true,
@@ -141,37 +141,33 @@ client.on('messageCreate', async (message) => {
           leaveOnEndCooldown: 60000,
         },
         requestedBy: message.author,
-        searchEngine: 'youtubeSearch',
+        searchEngine: QueryType.YOUTUBE_SEARCH,
       });
 
       await searching.delete().catch(() => {});
     }
 
-    // ── PAUSE ──
     else if (cmd === 'pause') {
       const queue = player.nodes.get(message.guild.id);
-      if (!queue?.isPlaying()) return message.reply({ embeds: [embed('❌ Aucune musique en cours.', COLOR_ERR)] });
+      if (!queue?.isPlaying()) return message.reply({ embeds: [embed('❌ Aucune musique.', COLOR_ERR)] });
       queue.node.pause();
       message.reply({ embeds: [embed('⏸️ Pause.', COLOR_OK)] });
     }
 
-    // ── RESUME ──
     else if (cmd === 'resume' || cmd === 'r') {
       const queue = player.nodes.get(message.guild.id);
-      if (!queue) return message.reply({ embeds: [embed('❌ Aucune musique en cours.', COLOR_ERR)] });
+      if (!queue) return message.reply({ embeds: [embed('❌ Aucune musique.', COLOR_ERR)] });
       queue.node.resume();
       message.reply({ embeds: [embed('▶️ Reprise.', COLOR_OK)] });
     }
 
-    // ── SKIP ──
     else if (cmd === 'skip' || cmd === 's') {
       const queue = player.nodes.get(message.guild.id);
-      if (!queue?.isPlaying()) return message.reply({ embeds: [embed('❌ Aucune musique en cours.', COLOR_ERR)] });
+      if (!queue?.isPlaying()) return message.reply({ embeds: [embed('❌ Aucune musique.', COLOR_ERR)] });
       queue.node.skip();
-      message.reply({ embeds: [embed('⏭️ Musique suivante.', COLOR_OK)] });
+      message.reply({ embeds: [embed('⏭️ Suivante.', COLOR_OK)] });
     }
 
-    // ── STOP ──
     else if (cmd === 'stop') {
       const queue = player.nodes.get(message.guild.id);
       if (!queue) return message.reply({ embeds: [embed('❌ Rien à arrêter.', COLOR_ERR)] });
@@ -179,38 +175,28 @@ client.on('messageCreate', async (message) => {
       message.reply({ embeds: [embed('⏹️ Arrêté.', COLOR_OK)] });
     }
 
-    // ── QUEUE ──
     else if (cmd === 'queue' || cmd === 'q') {
       const queue = player.nodes.get(message.guild.id);
       if (!queue?.currentTrack) return message.reply({ embeds: [embed('❌ File vide.', COLOR_ERR)] });
       const tracks = queue.tracks.toArray();
-      const list = [`▶️ **${queue.currentTrack.title}** (en cours)`, ...tracks.slice(0, 14).map((t, i) => `**${i + 1}.** ${t.title}`)].join('\n');
+      const list = [`▶️ **${queue.currentTrack.title}**`, ...tracks.slice(0, 14).map((t, i) => `**${i + 1}.** ${t.title}`)].join('\n');
       message.reply({
-        embeds: [new EmbedBuilder().setColor(COLOR).setTitle('👑 File d\'attente').setDescription(list).setFooter({ text: `🖤 ${tracks.length} musique(s) en attente` })],
+        embeds: [new EmbedBuilder().setColor(COLOR).setTitle('👑 File d\'attente').setDescription(list).setFooter({ text: `🖤 ${tracks.length} en attente` })],
       });
     }
 
-    // ── NOW PLAYING ──
     else if (cmd === 'nowplaying' || cmd === 'np') {
       const queue = player.nodes.get(message.guild.id);
       if (!queue?.currentTrack) return message.reply({ embeds: [embed('❌ Aucune musique.', COLOR_ERR)] });
       const track = queue.currentTrack;
       message.reply({
-        embeds: [
-          new EmbedBuilder().setColor(COLOR).setTitle('👑 BTCL MUSIC').setDescription('🎵 **Lecture en cours**')
-            .setThumbnail(track.thumbnail)
-            .addFields(
-              { name: '🎶 Titre', value: track.title, inline: false },
-              { name: '⏱️ Durée', value: track.duration, inline: true },
-              { name: '🔊 Volume', value: `${queue.node.volume}%`, inline: true },
-            )
-            .setFooter({ text: '🖤 BTCL Music' }),
-        ],
+        embeds: [new EmbedBuilder().setColor(COLOR).setTitle('👑 En cours').setThumbnail(track.thumbnail)
+          .addFields({ name: '🎵', value: track.title }, { name: '⏱️', value: track.duration, inline: true }, { name: '🔊', value: `${queue.node.volume}%`, inline: true })
+          .setFooter({ text: '🖤 BTCL Music' })],
         components: [buildButtons(queue.repeatMode > 0)],
       });
     }
 
-    // ── VOLUME ──
     else if (cmd === 'volume' || cmd === 'vol') {
       const vol = parseInt(args[0]);
       if (isNaN(vol) || vol < 0 || vol > 100) return message.reply({ embeds: [embed('❌ `+volume <0-100>`', COLOR_ERR)] });
@@ -220,17 +206,15 @@ client.on('messageCreate', async (message) => {
       message.reply({ embeds: [embed(`🔊 Volume : **${vol}%**`, COLOR_OK)] });
     }
 
-    // ── LOOP ──
     else if (cmd === 'loop') {
       const queue = player.nodes.get(message.guild.id);
       if (!queue) return message.reply({ embeds: [embed('❌ Aucune musique.', COLOR_ERR)] });
       const { QueueRepeatMode } = require('discord-player');
       const mode = queue.repeatMode === QueueRepeatMode.OFF ? QueueRepeatMode.TRACK : QueueRepeatMode.OFF;
       queue.setRepeatMode(mode);
-      message.reply({ embeds: [embed(`🔁 Répétition **${mode !== QueueRepeatMode.OFF ? 'activée' : 'désactivée'}**.`, COLOR_OK)] });
+      message.reply({ embeds: [embed(`🔁 **${mode !== QueueRepeatMode.OFF ? 'Activée' : 'Désactivée'}**`, COLOR_OK)] });
     }
 
-    // ── SHUFFLE ──
     else if (cmd === 'shuffle') {
       const queue = player.nodes.get(message.guild.id);
       if (!queue || queue.tracks.size < 2) return message.reply({ embeds: [embed('❌ Pas assez de musiques.', COLOR_ERR)] });
@@ -238,7 +222,6 @@ client.on('messageCreate', async (message) => {
       message.reply({ embeds: [embed('🔀 File mélangée.', COLOR_OK)] });
     }
 
-    // ── CLEAR ──
     else if (cmd === 'clear' || cmd === 'cq') {
       const queue = player.nodes.get(message.guild.id);
       if (!queue) return message.reply({ embeds: [embed('❌ File vide.', COLOR_ERR)] });
@@ -246,35 +229,30 @@ client.on('messageCreate', async (message) => {
       message.reply({ embeds: [embed('🗑️ File vidée.', COLOR_OK)] });
     }
 
-    // ── HELP ──
     else if (cmd === 'help' || cmd === 'h') {
       message.reply({
-        embeds: [
-          new EmbedBuilder().setColor(COLOR).setTitle('👑 BTCL Music — Commandes')
-            .addFields(
-              { name: '`+play <titre>`', value: 'Joue une musique', inline: false },
-              { name: '`+pause`', value: 'Pause/Reprend', inline: true },
-              { name: '`+skip`', value: 'Suivante', inline: true },
-              { name: '`+stop`', value: 'Arrête tout', inline: true },
-              { name: '`+queue`', value: 'File d\'attente', inline: true },
-              { name: '`+np`', value: 'En cours', inline: true },
-              { name: '`+volume <n>`', value: 'Volume', inline: true },
-              { name: '`+loop`', value: 'Répétition', inline: true },
-              { name: '`+shuffle`', value: 'Mélange', inline: true },
-              { name: '`+clear`', value: 'Vide la file', inline: true },
-            )
-            .setFooter({ text: '🖤 BTCL Music' }),
-        ],
+        embeds: [new EmbedBuilder().setColor(COLOR).setTitle('👑 BTCL Music')
+          .addFields(
+            { name: '`+play <titre>`', value: 'Joue une musique', inline: false },
+            { name: '`+pause`', value: 'Pause', inline: true },
+            { name: '`+resume`', value: 'Reprend', inline: true },
+            { name: '`+skip`', value: 'Suivante', inline: true },
+            { name: '`+stop`', value: 'Stop', inline: true },
+            { name: '`+queue`', value: 'File', inline: true },
+            { name: '`+np`', value: 'En cours', inline: true },
+            { name: '`+volume <n>`', value: 'Volume', inline: true },
+            { name: '`+loop`', value: 'Boucle', inline: true },
+            { name: '`+shuffle`', value: 'Mélange', inline: true },
+          ).setFooter({ text: '🖤 BTCL Music' })],
       });
     }
 
   } catch (err) {
-    console.error(`[Command: ${cmd}]`, err);
+    console.error(`[Command: ${cmd}]`, err.message);
     message.reply({ embeds: [embed(`❌ ${err.message}`, COLOR_ERR)] }).catch(() => {});
   }
 });
 
-// ─── Buttons ──────────────────────────────────────────────────────────────────
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isButton()) return;
   const queue = player.nodes.get(interaction.guild.id);
@@ -288,14 +266,14 @@ client.on('interactionCreate', async (interaction) => {
     if (interaction.customId === 'music_loop') queue.setRepeatMode(queue.repeatMode === QueueRepeatMode.OFF ? QueueRepeatMode.TRACK : QueueRepeatMode.OFF);
     if (interaction.customId === 'music_stop') queue.delete();
   } catch (err) {
-    console.error('[Button]', err);
+    console.error('[Button]', err.message);
   }
 });
 
-process.on('unhandledRejection', (err) => console.error('[UnhandledRejection]', err));
+process.on('unhandledRejection', (err) => console.error('[UnhandledRejection]', err?.message));
 process.on('uncaughtException', (err) => {
   if (err.code === 'EPIPE') return;
-  console.error('[UncaughtException]', err);
+  console.error('[UncaughtException]', err.message);
 });
 
 client.login(TOKEN).catch(err => {

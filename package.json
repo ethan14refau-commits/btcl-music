@@ -11,12 +11,12 @@
   },
   "dependencies": {
     "discord.js": "14.14.1",
-    "discord-api-types": "0.37.97",
-    "discord-player": "7.2.0",
-    "discord-player-youtubei": "1.2.9",
-    "simple-ytdl-core": "1.0.5",
-    "bgutils-js": "4.4.2",
-    "googlevideo": "4.0.9",
+    "discord-api-types": "0.37.83",
+    "@discordjs/voice": "0.17.0",
+    "@discordjs/opus": "0.9.0",
+    "discord-player": "6.6.10",
+    "@discord-player/extractor": "4.5.0",
+    "ffmpeg-static": "5.2.0",
     "dotenv": "16.4.5"
   }
 }
