@@ -6,7 +6,6 @@ const {
   EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
 } = require('discord.js');
 const { Player } = require('discord-player');
-const { DefaultExtractors } = require('@discord-player/extractor');
 
 const TOKEN = process.env.DISCORD_TOKEN;
 const PREFIX = process.env.PREFIX || '+';
@@ -29,9 +28,10 @@ const client = new Client({
 // ─── Discord Player setup ─────────────────────────────────────────────────────
 const player = new Player(client);
 
-player.extractors.register(DefaultExtractors, {}).then(() => {
+(async () => {
+  await player.extractors.loadDefault();
   console.log('✅ Extractors chargés');
-}).catch(console.error);
+})().catch(console.error);
 
 const COLOR = 0x0d0d0d;
 const COLOR_ERR = 0x2b0000;
