@@ -140,6 +140,7 @@ client.on('messageCreate', async (message) => {
           leaveOnEndCooldown: 60000,
         },
         requestedBy: message.author,
+        searchEngine: 'youtubeSearch',
       });
 
       await searching.delete().catch(() => {});
