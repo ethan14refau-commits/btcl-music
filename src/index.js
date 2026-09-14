@@ -6,7 +6,6 @@ const {
   EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
 } = require('discord.js');
 const { Player, QueryType } = require('discord-player');
-const { DefaultExtractors } = require('@discord-player/extractor');
 
 const TOKEN = process.env.DISCORD_TOKEN;
 const PREFIX = process.env.PREFIX || '+';
@@ -33,7 +32,7 @@ const player = new Player(client, {
   },
 });
 
-player.extractors.loadMulti(DefaultExtractors).then(() => {
+player.extractors.loadDefault((ext) => ext !== 'YouTubeExtractor').then(() => {
   console.log('✅ Extractors chargés');
 }).catch(console.error);
 
